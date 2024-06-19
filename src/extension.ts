@@ -1,12 +1,20 @@
 import * as vscode from 'vscode';
 import fetch from "node-fetch";
 
-let slackUserId: string | undefined = undefined;// "U06LKBCRLDA";
 const timeCommandId = 'arcade.showTimeLeft';
 const setUIDCommandId = 'arcade.setUserId';
+const setStyleCommandId = 'arcade.setStyle';
 const unsetUIDCommandId = 'arcade.unsetUserId';
-const userIdKey = 'arcade.userID';
+const resetSettingsCommandId = 'arcade.resetSettings';
 
+const userIdKey = 'arcade.userID';
+const statusSizeKey = 'arcade.statusSize';
+const statusTypeKey = 'arcade.statusType';
+
+
+let slackUserId: string | undefined = undefined;
+let statusSize: "small" | "normal" = "normal";
+let statusType: "time" | "percent" = "percent";
 let statusBarItem: vscode.StatusBarItem;
 let timeLeft = -1;
 
@@ -44,7 +52,7 @@ setInterval(() => {
 	checks++;
 
 	if (checks % 5 === 0) {
-		updateStatusBarItem();
+		renderStatus();
 	}
 
 	if (checks === 60) {
@@ -62,11 +70,31 @@ function getTimeSec(): number {
 }
 
 export async function activate({ subscriptions, globalState }: vscode.ExtensionContext) {
-	globalState.setKeysForSync([userIdKey]);
+	globalState.setKeysForSync([userIdKey, statusSizeKey, statusTypeKey]);
 
 	slackUserId = globalState.get(userIdKey);
 
-	subscriptions.push(vscode.commands.registerCommand(setUIDCommandId, async () => {
+	let tmpStatusSize = globalState.get(statusSizeKey);
+	if (!tmpStatusSize || (tmpStatusSize !== "small" && tmpStatusSize !== "normal")) {
+		tmpStatusSize = "normal";
+		await globalState.update(statusSizeKey, "normal");
+	}
+
+	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+	// @ts-ignore
+	statusSize = tmpStatusSize;
+
+	let tmpStatusType = globalState.get(statusTypeKey);
+	if (!tmpStatusSize || (tmpStatusType !== "time" && tmpStatusType !== "percent")) {
+		tmpStatusType = "time";
+		await globalState.update(statusTypeKey, "time");
+	}
+
+	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+	// @ts-ignore
+	statusType = tmpStatusType;
+
+	const setUIDHandler = async () => {
 		const userID = await vscode.window.showInputBox({
 			placeHolder: 'Enter your slack user id'
 		});
@@ -75,24 +103,95 @@ export async function activate({ subscriptions, globalState }: vscode.ExtensionC
 		slackUserId = userID;
 
 		if (await updateTimeLeft()) {
-			globalState.update(userIdKey, userID);
+			await globalState.update(userIdKey, userID);
 		}
 
-		updateStatusBarItem();
-	}));
+		renderStatus();
+	};
+
+	subscriptions.push(vscode.commands.registerCommand(setUIDCommandId, setUIDHandler));
 
 	subscriptions.push(vscode.commands.registerCommand(unsetUIDCommandId, async () => {
 		slackUserId = undefined;
 
-		globalState.update(userIdKey, undefined);
+		await globalState.update(userIdKey, undefined);
 		timeLeft = -1;
 
-		updateStatusBarItem();
+		renderStatus();
 
 		vscode.window.showErrorMessage("Removed your user id");
 	}));
 
+	subscriptions.push(vscode.commands.registerCommand(resetSettingsCommandId, async () => {
+		slackUserId = undefined;
+		await globalState.update(userIdKey, slackUserId);
+
+		statusSize = "normal";
+		await globalState.update(statusSizeKey, statusSize);
+
+		statusType = "time";
+		await globalState.update(statusTypeKey, statusType);
+
+		vscode.window.showWarningMessage("Reset all settings");
+	}));
+
+	subscriptions.push(vscode.commands.registerCommand(setStyleCommandId, async () => {
+		const style = await vscode.window.showQuickPick(["Normal", "Small"], { canPickMany: false, placeHolder: "Select status bar item size" });
+
+		if (!style) {
+			vscode.window.showWarningMessage("Style selection cancelled");
+			return;
+		}
+
+		switch (style) {
+			case "Normal": {
+				statusSize = "normal";
+				break;
+			}
+			case "Small": {
+				statusSize = "small";
+				break;
+			}
+			default: {
+				vscode.window.showErrorMessage("Impossible state...");
+				return;
+			}
+		}
+		await globalState.update(statusSizeKey, statusSize);
+
+		const type = await vscode.window.showQuickPick(["Timer", "Percent Done"], { canPickMany: false, placeHolder: "Select status bar item type" });
+
+		if (!type) {
+			vscode.window.showWarningMessage("Style selection cancelled");
+			return;
+		}
+
+		switch (type) {
+			case "Timer": {
+				statusType = "time";
+				break;
+			}
+			case "Percent Done": {
+				statusType = "percent";
+				break;
+			}
+			default: {
+				vscode.window.showErrorMessage("Impossible state #2...");
+				return;
+			}
+		}
+
+		await globalState.update(statusTypeKey, statusType);
+
+		renderStatus();
+	}));
+
 	subscriptions.push(vscode.commands.registerCommand(timeCommandId, () => {
+		if (!slackUserId) {
+			setUIDHandler();
+			return;
+		}
+
 		const left = getTimeSec();
 
 		if (left === 0) {
@@ -105,37 +204,99 @@ export async function activate({ subscriptions, globalState }: vscode.ExtensionC
 			vscode.window.showInformationMessage(`You are ${percent}% done with your current arcade session!\nYou have completed ${60 - min} / 60 minutes`);
 			updateTimeLeft();
 		}
-
 	}));
 
 	statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+	statusBarItem.command = timeCommandId;
 	subscriptions.push(statusBarItem);
 
 	await updateTimeLeft();
 
-	updateStatusBarItem();
+	renderStatus();
 }
 
-function updateStatusBarItem(): void {
+function renderNoID(): string {
+	// extensions-info-message
+
+	switch (statusSize) {
+		case "small": {
+			return "$(warning) No ID!";
+		}
+		case "normal": {
+			return "$(warning) Set your slack user id!";
+		}
+	}
+}
+
+function renderNoSession(): string {
+	switch (statusSize) {
+		case "small": {
+			return "$(debug-restart) No Hour!";
+		}
+		case "normal": {
+			return "$(debug-restart) Go start/resume an arcade session!";
+		}
+	}
+}
+
+function renderTime(left: number): string {
+	const min = Math.trunc(left / 60);
+	const sec = (left % 60).toString().padStart(2, "0");
+
+	switch (statusSize) {
+		case "small": {
+			return `$(watch) ${min}:${sec}`;
+		}
+		case "normal": {
+			return `$(clock) Arcade session time left: ${min}:${sec}`;
+		}
+	}
+}
+
+function renderPercent(left: number): string {
+	const percentNum = Math.floor(((60 * 60) - left) / (60 * 60) * 1000) / 10;
+
+	let percent = percentNum.toString();
+
+	if (percent.length === 2) {
+		percent += ".0";
+	}
+
+	switch (statusSize) {
+		case "small": {
+			return `$(clock) ${percent}%`;
+		}
+		case "normal": {
+			return `$(clock) Arcade session is ${percent}% done`;
+		}
+	}
+}
+
+function renderStatus() {
 	statusBarItem.show();
 
 	if (!slackUserId) {
-		statusBarItem.text = "$(extensions-info-message) Set your slack user id!";
-		statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
-		statusBarItem.command = setUIDCommandId;
+		statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+		statusBarItem.text = renderNoID();
 		return;
 	}
 
-	statusBarItem.command = timeCommandId;
+	const left = getTimeSec();
 	statusBarItem.backgroundColor = undefined;
 
-	const left = getTimeSec();
+	if (left === 0) {
+		statusBarItem.text = renderNoSession();
+		return;
+	}
 
-	if (left !== 0) {
-		const min = Math.trunc(left / 60);
-		const sec = (left % 60).toString().padStart(2, "0");
-		statusBarItem.text = `$(testing-queued-icon) Arcade session time left: ${min}:${sec}`;
-	} else {
-		statusBarItem.text = "$(debug-restart) Go start/resume an arcade session!";
+	switch (statusType) {
+		case "time": {
+			statusBarItem.text = renderTime(left);
+			break;
+		}
+		case "percent": {
+			statusBarItem.text = renderPercent(left);
+			break;
+		}
 	}
 }

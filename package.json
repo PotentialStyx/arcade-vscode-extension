@@ -24,6 +24,14 @@
       {
         "command": "arcade.unsetUserId",
         "title": "Hack Club Arcade Timer: Remove Slack User ID"
+      },
+      {
+        "command": "arcade.setStyle",
+        "title": "Hack Club Arcade Timer: Set Status Bar Style"
+      },
+      {
+        "command": "arcade.resetSettings",
+        "title": "Hack Club Arcade Timer: Reset All Settings"
       }
     ]
   },
