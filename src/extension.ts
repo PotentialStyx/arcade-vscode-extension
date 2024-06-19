@@ -196,6 +196,8 @@ export async function activate({ subscriptions, globalState }: vscode.ExtensionC
 
 		if (left === 0) {
 			vscode.window.showInformationMessage(`The Hack Club Arcade API says there is no active session right now.\nThis could mean you have a paused session or just haven't started one yet.\n\nGO AND START/RESUME A SESSION!!!!!`);
+		} else if (left < 0) {
+			vscode.window.showWarningMessage(`The Hack Club Arcade API has glitched and said you have negative time left! This is caused by a desync when pausing, sorry for the inconvenience, there is nothing you can do about this. (Just for fun, the Arcade API api says you have ${left} seconds left)`);
 		} else {
 			const percent = Math.floor(((60 * 60) - left) / (60 * 60) * 1000) / 10;
 
@@ -231,10 +233,21 @@ function renderNoID(): string {
 function renderNoSession(): string {
 	switch (statusSize) {
 		case "small": {
-			return "$(debug-restart) No Hour!";
+			return "$(debug-restart) Get Hacking!";
 		}
 		case "normal": {
 			return "$(debug-restart) Go start/resume an arcade session!";
+		}
+	}
+}
+
+function renderGlitchedTime(left: number): string {
+	switch (statusSize) {
+		case "small": {
+			return `$(warning) Oh No!`;
+		}
+		case "normal": {
+			return `$(warning) Arcade API glitched, click for info`;
 		}
 	}
 }
@@ -286,6 +299,10 @@ function renderStatus() {
 
 	if (left === 0) {
 		statusBarItem.text = renderNoSession();
+		return;
+	} else if (left < 0) {
+		statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+		statusBarItem.text = renderGlitchedTime(left);
 		return;
 	}
 
