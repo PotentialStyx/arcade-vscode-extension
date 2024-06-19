@@ -15,6 +15,18 @@
   "activationEvents": [
     "onStartupFinished"
   ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "arcade.setUserId",
+        "title": "Hack Club Arcade Timer: Set Slack User ID"
+      },
+      {
+        "command": "arcade.unsetUserId",
+        "title": "Hack Club Arcade Timer: Remove Slack User ID"
+      }
+    ]
+  },
   "main": "./out/extension.js",
   "scripts": {
     "vscode:prepublish": "npm run compile",
