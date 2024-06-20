@@ -1,12 +1,3 @@
-# Status Bar Sample
+# Hack Club Arcade Tracker VSCode extension
 
-This is a sample extension that adds a status bar entry showing the current number of selected lines.
-
-![Show number of selected lines](https://raw.githubusercontent.com/Microsoft/vscode-extension-samples/main/statusbar-sample/preview.gif)
-
-
-## VS Code API
-
-### `vscode` module
-
-- [`window.createStatusBarItem`](https://code.visualstudio.com/api/references/vscode-api#window.createStatusBarItem)
+This is a WIP extension to track your [Hack Club Arcade](https://hackclub.com/arcade) timer directly in vscode.
